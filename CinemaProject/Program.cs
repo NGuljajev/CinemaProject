@@ -1,84 +1,64 @@
-﻿using System.IO;
-using System.Reflection;
-using CinemaBackend.Data;
+﻿using CinemaBackend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ---------- Kestrel ports ----------
-builder.WebHost.UseUrls("http://localhost:5298", "https://localhost:7282");
+// 1) Bind Kestrel to HTTP & HTTPS ports you’ll actually use
+builder.WebHost.UseUrls(
+    "http://localhost:5298",  // match your swagger URL
+    "https://localhost:7282"
+);
 
-// ---------- Configuration ----------
 var conn = builder.Configuration.GetConnectionString("CinemaDb");
 
-// ---------- Services ----------
-builder.Services.AddControllers();
-
-// EF Core (MySQL via Pomelo)
+// 2) Register services
 builder.Services.AddDbContext<CinemaDbContext>(opts =>
     opts.UseMySql(conn, ServerVersion.AutoDetect(conn))
 );
 
-// CORS: named policy with explicit origins; safe defaults for dev
-var corsPolicyName = "FrontendCorsPolicy";
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(name: corsPolicyName, policy =>
-    {
-        policy.WithOrigins("http://localhost:4200") // update to your frontend origin(s)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials(); // remove if you don't use credentials/cookies
-    });
+builder.Services.AddControllers();
 
-    // permissive fallback for local testing (only if you need it)
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-    });
-});
+// 3) CORS - wide open for dev
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.AllowAnyOrigin()
+     .AllowAnyMethod()
+     .AllowAnyHeader()
+));
 
-// Swagger / OpenAPI
+// 4) Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Cinema API V1", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Cinema API", Version = "v1" });
 
+    // XML comments if you have them
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
-    {
         c.IncludeXmlComments(xmlPath);
-    }
-
-    // JWT or other security definitions can be added here if needed
 });
 
 var app = builder.Build();
 
-// ---------- Middleware order ----------
-if (app.Environment.IsDevelopment())
-{
-    app.UseDeveloperExceptionPage();
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cinema API V1");
-        c.RoutePrefix = "swagger"; // serve UI at /swagger
-    });
-}
-else
-{
-    app.UseExceptionHandler("/error"); // production error endpoint (implement as needed)
-    app.UseHsts();
-}
+// 5) Middleware pipeline
 
-// Use CORS before routing/authorization/mapping controllers
-app.UseCors(corsPolicyName);
+// Always serve Swagger UI at root for dev
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cinema API V1");
+    c.RoutePrefix = "";
+    // now Swagger UI is at http://localhost:5298/
+});
 
-// HTTPS redirection after CORS (safe)
+// Redirect root → Swagger if you like
+app.MapGet("/", () => Results.Redirect("/"));
+
 app.UseHttpsRedirection();
+
+app.UseCors();       // apply default CORS policy
 
 app.UseAuthorization();
 
