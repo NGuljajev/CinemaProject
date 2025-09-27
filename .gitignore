@@ -1,0 +1,22 @@
+# Visual Studio / build / IDE
+.vs/
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# db/cache files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# IDE folders
+.idea/
+.vscode/
+
+# logs / temp
+*.log
+*.tmp
